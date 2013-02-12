@@ -14,6 +14,17 @@
 
 #define CMOCK_GUTS_NONE (0)
 
+#ifndef NULL
+#define NULL (void*)0
+#endif
+
+#define CHAR_TO_MAGIC(a,b,c,d) (((a)<<24) | ((b) << 16) | ((c) << 8) | (d))
+/* M = 0x31323334 - "1234"
+ *  MAGIC_TO_CHAR(M,0) = "1"
+ */    
+#define MAGIC_TO_CHAR(m,i)  (((m) >> ((3-(i)) * 8)) & 0xFF)
+#define MAGIC_EQ(m,s)  (m == (((s[0])<<24) | ((s[1]) << 16) | ((s[2]) << 8) | (s[3])))
+
 //-------------------------------------------------------
 // Memory API
 //-------------------------------------------------------

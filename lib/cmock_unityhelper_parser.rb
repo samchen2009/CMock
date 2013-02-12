@@ -2,21 +2,38 @@
 #   CMock Project - Automatic Mock Generation for C
 #   Copyright (c) 2007 Mike Karlesky, Mark VanderVoord, Greg Williams
 #   [Released under MIT License. Please refer to license.txt for details]
-# ========================================== 
+# ==========================================
 
 class CMockUnityHelperParser
-  
+
   attr_accessor :c_types
-  
+
   def initialize(config)
     @config = config
-    @fallback = @config.plugins.include?(:array) ? 'UNITY_TEST_ASSERT_EQUAL_MEMORY_ARRAY' : 'UNITY_TEST_ASSERT_EQUAL_MEMORY'
+    #@fallback = @config.plugins.include?(:array) ? 'UNITY_TEST_ASSERT_EQUAL_MEMORY_ARRAY' : 'UNITY_TEST_ASSERT_EQUAL_MEMORY'
+    @fallback = 'UNITY_TEST_ASSERT_EQUAL_UINT32'
     @c_types = map_C_types.merge(import_source)
   end
+
+  def fuzzy_lookup(ctype)
+    lookup = ctype.gsub(/(?:^|(\S?)(\s*)|(\W))const(?:$|(\s*)(\S)|(\W))/,'\1\3\5\6').strip.gsub(/\s+/,'_')
+    @c_types.each_pair do |original,expected|
+      fuzzy_type = original.gsub(/(\*|\?)/,"")
+      if lookup =~ /#{fuzzy_type}$/
+        puts "#{original} -> #{expected} "
+        return expected
+      end
+    end  
+    return nil
+  end    
 
   def get_helper(ctype)
     lookup = ctype.gsub(/(?:^|(\S?)(\s*)|(\W))const(?:$|(\s*)(\S)|(\W))/,'\1\3\5\6').strip.gsub(/\s+/,'_')
     return [@c_types[lookup], ''] if (@c_types[lookup])
+    
+    x = fuzzy_lookup(lookup)
+    return [x,''] if !lookup.nil?
+
     if (lookup =~ /\*$/)
       lookup = lookup.gsub(/\*$/,'')
       return [@c_types[lookup], '*'] if (@c_types[lookup])
@@ -28,9 +45,9 @@ class CMockUnityHelperParser
     raise("Don't know how to test #{ctype} and memory tests are disabled!") unless @config.memcmp_if_unknown
     return (lookup =~ /\*$/) ? [@fallback, '&'] : [@fallback, '']
   end
-  
+
   private ###########################
-  
+
   def map_C_types
     c_types = {}
     @config.treat_as.each_pair do |ctype, expecttype|
@@ -41,17 +58,18 @@ class CMockUnityHelperParser
         c_types[c_type] = "UNITY_TEST_ASSERT_EQUAL_#{expecttype}"
         c_types[c_type+'*'] ||= "UNITY_TEST_ASSERT_EQUAL_#{expecttype}_ARRAY"
       end
+#       puts "#{c_type} --> #{expecttype} --> #{c_types[c_type]}"
     end
     c_types
   end
-  
+
   def import_source
     source = @config.load_unity_helper
     return {} if source.nil?
     c_types = {}
     source = source.gsub(/\/\/.*$/, '') #remove line comments
     source = source.gsub(/\/\*.*?\*\//m, '') #remove block comments
-     
+
     #scan for comparison helpers
     match_regex = Regexp.new('^\s*#define\s+(UNITY_TEST_ASSERT_EQUAL_(\w+))\s*\(' + Array.new(4,'\s*\w+\s*').join(',') + '\)')
     pairs = source.scan(match_regex).flatten.compact
@@ -60,7 +78,7 @@ class CMockUnityHelperParser
       ctype = pairs[(i*2)+1]
       c_types[ctype] = expect unless expect.include?("_ARRAY")
     end
-      
+
     #scan for array variants of those helpers
     match_regex = Regexp.new('^\s*#define\s+(UNITY_TEST_ASSERT_EQUAL_(\w+_ARRAY))\s*\(' + Array.new(5,'\s*\w+\s*').join(',') + '\)')
     pairs = source.scan(match_regex).flatten.compact
@@ -69,7 +87,7 @@ class CMockUnityHelperParser
       ctype = pairs[(i*2)+1]
       c_types[ctype.gsub('_ARRAY','*')] = expect
     end
-    
+
     c_types
   end
 end
